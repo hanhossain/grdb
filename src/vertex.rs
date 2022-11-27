@@ -1,3 +1,4 @@
+use crate::create_vertex_key;
 use crate::db::PrefixSearchIterator;
 use rocksdb::{DBWithThreadMode, SingleThreaded};
 use serde::{Deserialize, Serialize};
@@ -45,5 +46,23 @@ impl<'a> Iterator for VertexTraversal<'a> {
             let (_, value) = self.prefix_search.next()?;
             Some(bincode::deserialize(&value).unwrap())
         }
+    }
+}
+
+pub struct VertexWithIdTraversal<'a> {
+    pub(crate) database: &'a DBWithThreadMode<SingleThreaded>,
+    pub(crate) id: Option<usize>,
+}
+
+impl<'a> Iterator for VertexWithIdTraversal<'a> {
+    type Item = Vertex;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        let id = self.id.take()?;
+        let key = create_vertex_key(id);
+        self.database
+            .get(key)
+            .unwrap()
+            .map(|v| bincode::deserialize(&v).unwrap())
     }
 }

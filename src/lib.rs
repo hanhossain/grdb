@@ -1,7 +1,7 @@
 mod db;
 pub mod vertex;
 
-use crate::vertex::Vertex;
+use crate::vertex::{Vertex, VertexWithIdTraversal};
 use db::PrefixSearchIterator;
 use rocksdb::{DBWithThreadMode, SingleThreaded, DB};
 use serde::{Deserialize, Serialize};
@@ -75,6 +75,14 @@ impl GraphTraversalSource {
         VertexTraversal {
             prefix_search,
             label: Some(label),
+        }
+    }
+
+    /// Spawns a traversal starting with the vertex with the specified id.
+    pub fn vertex_with_id(&self, id: usize) -> VertexWithIdTraversal {
+        VertexWithIdTraversal {
+            database: &self.database,
+            id: Some(id),
         }
     }
 
@@ -183,5 +191,20 @@ mod tests {
             .collect();
 
         assert_eq!(actual, expected);
+    }
+
+    #[test]
+    fn get_vertex_with_id() {
+        let config = TestContext::generate();
+        let mut graph = GraphTraversalSource::new(&config.filepath);
+
+        let v1 = graph.add_vertex();
+        let v2 = graph.add_vertex_with_label("custom");
+
+        let actual1: Vec<_> = graph.vertex_with_id(v1.id()).collect();
+        assert_eq!(actual1, vec![v1]);
+
+        let actual2: Vec<_> = graph.vertex_with_id(v2.id()).collect();
+        assert_eq!(actual2, vec![v2]);
     }
 }
