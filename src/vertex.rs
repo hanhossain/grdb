@@ -24,15 +24,26 @@ impl Vertex {
     }
 }
 
-pub struct VertexTraversal<'a>(
-    pub(crate) PrefixSearchIterator<'a, DBWithThreadMode<SingleThreaded>>,
-);
+pub struct VertexTraversal<'a> {
+    pub(crate) prefix_search: PrefixSearchIterator<'a, DBWithThreadMode<SingleThreaded>>,
+    pub(crate) label: Option<&'a str>,
+}
 
 impl<'a> Iterator for VertexTraversal<'a> {
     type Item = Vertex;
 
     fn next(&mut self) -> Option<Self::Item> {
-        let (_, value) = self.0.next()?;
-        Some(bincode::deserialize(&value).unwrap())
+        if let Some(label) = self.label {
+            while let Some((_, value)) = self.prefix_search.next() {
+                let value: Vertex = bincode::deserialize(&value).unwrap();
+                if value.label == label {
+                    return Some(value);
+                }
+            }
+            None
+        } else {
+            let (_, value) = self.prefix_search.next()?;
+            Some(bincode::deserialize(&value).unwrap())
+        }
     }
 }

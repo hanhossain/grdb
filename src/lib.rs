@@ -60,7 +60,22 @@ impl GraphTraversalSource {
             prefix_iterator: self.database.prefix_iterator(VERTEX_PREFIX),
             prefix: VERTEX_PREFIX.as_bytes(),
         };
-        VertexTraversal(prefix_search)
+        VertexTraversal {
+            prefix_search,
+            label: None,
+        }
+    }
+
+    /// Spawns a `VertexTraversal` over the vertices with the specified label.
+    pub fn vertices_with_label<'a>(&'a self, label: &'a str) -> VertexTraversal<'a> {
+        let prefix_search = PrefixSearchIterator {
+            prefix_iterator: self.database.prefix_iterator(VERTEX_PREFIX),
+            prefix: VERTEX_PREFIX.as_bytes(),
+        };
+        VertexTraversal {
+            prefix_search,
+            label: Some(label),
+        }
     }
 
     /// Saves the context to the database.
@@ -144,6 +159,28 @@ mod tests {
         expected.insert(v2.id(), v2);
 
         let actual: HashMap<_, _> = graph.vertices().map(|v| (v.id(), v)).collect();
+
+        assert_eq!(actual, expected);
+    }
+
+    #[test]
+    fn get_vertices_with_label() {
+        let config = TestContext::generate();
+        let mut graph = GraphTraversalSource::new(&config.filepath);
+
+        let _v1 = graph.add_vertex();
+        let v2 = graph.add_vertex_with_label("custom");
+        let _v3 = graph.add_vertex();
+        let v4 = graph.add_vertex_with_label("custom");
+
+        let mut expected = HashMap::new();
+        expected.insert(v2.id(), v2);
+        expected.insert(v4.id(), v4);
+
+        let actual: HashMap<_, _> = graph
+            .vertices_with_label("custom")
+            .map(|v| (v.id(), v))
+            .collect();
 
         assert_eq!(actual, expected);
     }
