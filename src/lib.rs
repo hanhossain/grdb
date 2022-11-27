@@ -9,7 +9,6 @@ use std::path::Path;
 use vertex::VertexTraversal;
 
 const KEY_SYS_CONTEXT: &str = "sys_context";
-const VERTEX_PREFIX: &str = "vtx_";
 
 #[derive(Debug)]
 pub struct GraphTraversalSource {
@@ -57,8 +56,8 @@ impl GraphTraversalSource {
     /// Spawns a `VertexTraversal` over all vertices.
     pub fn vertices(&self) -> VertexTraversal {
         let prefix_search = PrefixSearchIterator {
-            prefix_iterator: self.database.prefix_iterator(VERTEX_PREFIX),
-            prefix: VERTEX_PREFIX.as_bytes(),
+            prefix_iterator: self.database.prefix_iterator(vertex::KEY_PREFIX),
+            prefix: vertex::KEY_PREFIX.as_bytes(),
         };
         VertexTraversal {
             prefix_search,
@@ -69,8 +68,8 @@ impl GraphTraversalSource {
     /// Spawns a `VertexTraversal` over the vertices with the specified label.
     pub fn vertices_with_label<'a>(&'a self, label: &'a str) -> VertexTraversal<'a> {
         let prefix_search = PrefixSearchIterator {
-            prefix_iterator: self.database.prefix_iterator(VERTEX_PREFIX),
-            prefix: VERTEX_PREFIX.as_bytes(),
+            prefix_iterator: self.database.prefix_iterator(vertex::KEY_PREFIX),
+            prefix: vertex::KEY_PREFIX.as_bytes(),
         };
         VertexTraversal {
             prefix_search,
@@ -94,7 +93,7 @@ impl GraphTraversalSource {
 }
 
 fn create_vertex_key(id: usize) -> String {
-    format!("{}{}", VERTEX_PREFIX, id)
+    format!("{}{}", vertex::KEY_PREFIX, id)
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

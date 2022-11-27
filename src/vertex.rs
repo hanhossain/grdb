@@ -5,6 +5,7 @@ use serde::{Deserialize, Serialize};
 use std::fmt::Debug;
 
 pub const DEFAULT_LABEL: &str = "vertex";
+pub const KEY_PREFIX: &str = "vtx_";
 
 #[derive(Debug, Serialize, Deserialize, Clone, Eq, PartialEq)]
 pub struct Vertex {
