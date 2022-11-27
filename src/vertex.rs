@@ -1,8 +1,9 @@
-use crate::create_vertex_key;
 use crate::db::PrefixSearchIterator;
+use crate::{create_vertex_key, TraversalContext};
 use rocksdb::{DBWithThreadMode, SingleThreaded};
 use serde::{Deserialize, Serialize};
 use std::fmt::Debug;
+use std::rc::Rc;
 
 pub const DEFAULT_LABEL: &str = "vertex";
 pub const KEY_PREFIX: &str = "vtx_";
@@ -29,6 +30,7 @@ impl Vertex {
 pub struct VertexTraversal<'a> {
     pub(crate) prefix_search: PrefixSearchIterator<'a, DBWithThreadMode<SingleThreaded>>,
     pub(crate) label: Option<&'a str>,
+    pub(crate) _context: Rc<TraversalContext<'a>>,
 }
 
 impl<'a> Iterator for VertexTraversal<'a> {
@@ -53,6 +55,7 @@ impl<'a> Iterator for VertexTraversal<'a> {
 pub struct VertexWithIdTraversal<'a> {
     pub(crate) database: &'a DBWithThreadMode<SingleThreaded>,
     pub(crate) id: Option<usize>,
+    pub(crate) _context: Rc<TraversalContext<'a>>,
 }
 
 impl<'a> Iterator for VertexWithIdTraversal<'a> {
@@ -65,5 +68,19 @@ impl<'a> Iterator for VertexWithIdTraversal<'a> {
             .get(key)
             .unwrap()
             .map(|v| bincode::deserialize(&v).unwrap())
+    }
+}
+
+pub struct AddVertexTraversal<'a> {
+    pub(crate) id: Option<usize>,
+    pub(crate) context: Rc<TraversalContext<'a>>,
+}
+
+impl<'a> Iterator for AddVertexTraversal<'a> {
+    type Item = Vertex;
+
+    fn next(&mut self) -> Option<Self::Item> {
+        let id = self.id.take()?;
+        self.context.vertices.get(&id).map(|v| v.entry.clone())
     }
 }

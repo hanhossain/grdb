@@ -1,12 +1,14 @@
 mod db;
 pub mod vertex;
 
-use crate::vertex::{Vertex, VertexWithIdTraversal};
+use crate::vertex::{AddVertexTraversal, Vertex, VertexWithIdTraversal};
 use db::PrefixSearchIterator;
 use rocksdb::{DBWithThreadMode, SingleThreaded, DB};
 use serde::{Deserialize, Serialize};
 use std::cell::Cell;
+use std::collections::HashMap;
 use std::path::Path;
+use std::rc::Rc;
 use vertex::VertexTraversal;
 
 const KEY_SYS_CONTEXT: &str = "sys_context";
@@ -37,26 +39,28 @@ impl GraphTraversalSource {
     }
 
     /// Spawns a traversal by adding a vertex with the default label.
-    /// TODO: This needs work to follow the usual traversal pattern.
-    pub fn add_vertex(&self) -> Vertex {
+    pub fn add_vertex(&self) -> AddVertexTraversal {
         self.add_vertex_with_label(vertex::DEFAULT_LABEL)
     }
 
     /// Spawns a traversal by adding a vertex with the specified label.
-    /// TODO: This needs work to follow the usual traversal pattern.
-    pub fn add_vertex_with_label<S: ToString>(&self, label: S) -> Vertex {
+    pub fn add_vertex_with_label<S: ToString>(&self, label: S) -> AddVertexTraversal {
         let id = self.new_id();
 
         let vertex = Vertex::new(id, label);
-        let bytes = bincode::serialize(&vertex).unwrap();
-        let key = create_vertex_key(vertex.id());
+        let mut vertices = HashMap::new();
+        vertices.insert(id, DirtyEntry::new(vertex));
 
-        self.database.put(key, bytes).unwrap();
-
-        vertex
+        AddVertexTraversal {
+            id: Some(id),
+            context: Rc::new(TraversalContext {
+                database: &self.database,
+                vertices,
+            }),
+        }
     }
 
-    /// Spawns a `VertexTraversal` over all vertices.
+    /// Spawns a traversal over all vertices.
     pub fn vertices(&self) -> VertexTraversal {
         let prefix_search = PrefixSearchIterator {
             prefix_iterator: self.database.prefix_iterator(vertex::KEY_PREFIX),
@@ -65,10 +69,14 @@ impl GraphTraversalSource {
         VertexTraversal {
             prefix_search,
             label: None,
+            _context: Rc::new(TraversalContext {
+                database: &self.database,
+                vertices: HashMap::new(),
+            }),
         }
     }
 
-    /// Spawns a `VertexTraversal` over the vertices with the specified label.
+    /// Spawns a traversal over the vertices with the specified label.
     pub fn vertices_with_label<'a>(&'a self, label: &'a str) -> VertexTraversal<'a> {
         let prefix_search = PrefixSearchIterator {
             prefix_iterator: self.database.prefix_iterator(vertex::KEY_PREFIX),
@@ -77,6 +85,10 @@ impl GraphTraversalSource {
         VertexTraversal {
             prefix_search,
             label: Some(label),
+            _context: Rc::new(TraversalContext {
+                database: &self.database,
+                vertices: HashMap::new(),
+            }),
         }
     }
 
@@ -85,6 +97,10 @@ impl GraphTraversalSource {
         VertexWithIdTraversal {
             database: &self.database,
             id: Some(id),
+            _context: Rc::new(TraversalContext {
+                database: &self.database,
+                vertices: HashMap::new(),
+            }),
         }
     }
 
@@ -101,6 +117,37 @@ impl GraphTraversalSource {
         self.context.set(context);
         self.save_context();
         context.lsn
+    }
+}
+
+#[derive(Debug)]
+pub(crate) struct DirtyEntry<T> {
+    pub(crate) dirty: bool,
+    pub(crate) entry: T,
+}
+
+impl<T> DirtyEntry<T> {
+    pub(crate) fn new(entry: T) -> DirtyEntry<T> {
+        DirtyEntry { dirty: true, entry }
+    }
+}
+
+struct TraversalContext<'a> {
+    database: &'a DBWithThreadMode<SingleThreaded>,
+    vertices: HashMap<usize, DirtyEntry<Vertex>>,
+}
+
+impl<'a> Drop for TraversalContext<'a> {
+    fn drop(&mut self) {
+        eprintln!("dropping traversal context");
+        dbg!(&self.vertices);
+        for (id, vertex) in &self.vertices {
+            if vertex.dirty {
+                let key = create_vertex_key(*id);
+                let value = bincode::serialize(&vertex.entry).unwrap();
+                self.database.put(key, value).unwrap();
+            }
+        }
     }
 }
 
@@ -153,8 +200,8 @@ mod tests {
         let config = TestContext::generate();
         let graph = GraphTraversalSource::new(&config.filepath);
 
-        let v1 = graph.add_vertex();
-        let v2 = graph.add_vertex();
+        let v1 = graph.add_vertex().next().unwrap();
+        let v2 = graph.add_vertex().next().unwrap();
 
         let mut expected = HashMap::new();
         expected.insert(v1.id(), v1);
@@ -170,8 +217,8 @@ mod tests {
         let config = TestContext::generate();
         let graph = GraphTraversalSource::new(&config.filepath);
 
-        let v1 = graph.add_vertex_with_label("v1");
-        let v2 = graph.add_vertex_with_label("v2");
+        let v1 = graph.add_vertex_with_label("v1").next().unwrap();
+        let v2 = graph.add_vertex_with_label("v2").next().unwrap();
 
         let mut expected = HashMap::new();
         expected.insert(v1.id(), v1);
@@ -187,10 +234,10 @@ mod tests {
         let config = TestContext::generate();
         let graph = GraphTraversalSource::new(&config.filepath);
 
-        let _v1 = graph.add_vertex();
-        let v2 = graph.add_vertex_with_label("custom");
-        let _v3 = graph.add_vertex();
-        let v4 = graph.add_vertex_with_label("custom");
+        let _v1 = graph.add_vertex().next().unwrap();
+        let v2 = graph.add_vertex_with_label("custom").next().unwrap();
+        let _v3 = graph.add_vertex().next().unwrap();
+        let v4 = graph.add_vertex_with_label("custom").next().unwrap();
 
         let mut expected = HashMap::new();
         expected.insert(v2.id(), v2);
@@ -209,8 +256,8 @@ mod tests {
         let config = TestContext::generate();
         let graph = GraphTraversalSource::new(&config.filepath);
 
-        let v1 = graph.add_vertex();
-        let v2 = graph.add_vertex_with_label("custom");
+        let v1 = graph.add_vertex().next().unwrap();
+        let v2 = graph.add_vertex_with_label("custom").next().unwrap();
 
         let actual1: Vec<_> = graph.vertex_with_id(v1.id()).collect();
         assert_eq!(actual1, vec![v1]);
