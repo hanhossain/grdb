@@ -5,6 +5,7 @@ use crate::vertex::{Vertex, VertexWithIdTraversal};
 use db::PrefixSearchIterator;
 use rocksdb::{DBWithThreadMode, SingleThreaded, DB};
 use serde::{Deserialize, Serialize};
+use std::cell::Cell;
 use std::path::Path;
 use vertex::VertexTraversal;
 
@@ -13,7 +14,7 @@ const KEY_SYS_CONTEXT: &str = "sys_context";
 #[derive(Debug)]
 pub struct GraphTraversalSource {
     database: DBWithThreadMode<SingleThreaded>,
-    context: GraphContext,
+    context: Cell<GraphContext>,
 }
 
 impl GraphTraversalSource {
@@ -29,22 +30,24 @@ impl GraphTraversalSource {
             Some(x) => bincode::deserialize(&x).unwrap(),
         };
 
-        GraphTraversalSource { database, context }
+        GraphTraversalSource {
+            database,
+            context: Cell::new(context),
+        }
     }
 
     /// Spawns a traversal by adding a vertex with the default label.
     /// TODO: This needs work to follow the usual traversal pattern.
-    pub fn add_vertex(&mut self) -> Vertex {
+    pub fn add_vertex(&self) -> Vertex {
         self.add_vertex_with_label(vertex::DEFAULT_LABEL)
     }
 
     /// Spawns a traversal by adding a vertex with the specified label.
     /// TODO: This needs work to follow the usual traversal pattern.
-    pub fn add_vertex_with_label<S: ToString>(&mut self, label: S) -> Vertex {
-        self.context.lsn += 1;
-        self.save_context();
+    pub fn add_vertex_with_label<S: ToString>(&self, label: S) -> Vertex {
+        let id = self.new_id();
 
-        let vertex = Vertex::new(self.context.lsn, label);
+        let vertex = Vertex::new(id, label);
         let bytes = bincode::serialize(&vertex).unwrap();
         let key = create_vertex_key(vertex.id());
 
@@ -86,9 +89,18 @@ impl GraphTraversalSource {
     }
 
     /// Saves the context to the database.
-    fn save_context(&mut self) {
+    fn save_context(&self) {
         let bytes = bincode::serialize(&self.context).unwrap();
         self.database.put(KEY_SYS_CONTEXT, bytes).unwrap();
+    }
+
+    /// Generate a new id.
+    fn new_id(&self) -> usize {
+        let mut context = self.context.get();
+        context.lsn += 1;
+        self.context.set(context);
+        self.save_context();
+        context.lsn
     }
 }
 
@@ -96,7 +108,7 @@ fn create_vertex_key(id: usize) -> String {
     format!("{}{}", vertex::KEY_PREFIX, id)
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug, Clone, Copy, Serialize, Deserialize)]
 struct GraphContext {
     /// Last sequence number
     lsn: usize,
@@ -139,7 +151,7 @@ mod tests {
     #[test]
     fn add_vertices() {
         let config = TestContext::generate();
-        let mut graph = GraphTraversalSource::new(&config.filepath);
+        let graph = GraphTraversalSource::new(&config.filepath);
 
         let v1 = graph.add_vertex();
         let v2 = graph.add_vertex();
@@ -156,7 +168,7 @@ mod tests {
     #[test]
     fn add_vertices_with_label() {
         let config = TestContext::generate();
-        let mut graph = GraphTraversalSource::new(&config.filepath);
+        let graph = GraphTraversalSource::new(&config.filepath);
 
         let v1 = graph.add_vertex_with_label("v1");
         let v2 = graph.add_vertex_with_label("v2");
@@ -173,7 +185,7 @@ mod tests {
     #[test]
     fn get_vertices_with_label() {
         let config = TestContext::generate();
-        let mut graph = GraphTraversalSource::new(&config.filepath);
+        let graph = GraphTraversalSource::new(&config.filepath);
 
         let _v1 = graph.add_vertex();
         let v2 = graph.add_vertex_with_label("custom");
@@ -195,7 +207,7 @@ mod tests {
     #[test]
     fn get_vertex_with_id() {
         let config = TestContext::generate();
-        let mut graph = GraphTraversalSource::new(&config.filepath);
+        let graph = GraphTraversalSource::new(&config.filepath);
 
         let v1 = graph.add_vertex();
         let v2 = graph.add_vertex_with_label("custom");
