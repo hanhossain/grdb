@@ -12,10 +12,10 @@ pub struct Vertex {
 }
 
 impl Vertex {
-    pub(crate) fn new(id: usize) -> Vertex {
+    pub(crate) fn new<S: ToString>(id: usize, label: S) -> Vertex {
         Vertex {
             id,
-            label: DEFAULT_LABEL.to_owned(),
+            label: label.to_string(),
         }
     }
 

@@ -35,11 +35,16 @@ impl GraphTraversalSource {
     /// Spawns a traversal by adding a vertex with the default label.
     /// TODO: This needs work to follow the usual traversal pattern.
     pub fn add_vertex(&mut self) -> Vertex {
+        self.add_vertex_with_label(vertex::DEFAULT_LABEL)
+    }
+
+    /// Spawns a traversal by adding a vertex with the specified label.
+    /// TODO: This needs work to follow the usual traversal pattern.
+    pub fn add_vertex_with_label<S: ToString>(&mut self, label: S) -> Vertex {
         self.context.lsn += 1;
         self.save_context();
 
-        let vertex = Vertex::new(self.context.lsn);
-
+        let vertex = Vertex::new(self.context.lsn, label);
         let bytes = bincode::serialize(&vertex).unwrap();
         let key = create_vertex_key(vertex.id());
 
@@ -116,6 +121,23 @@ mod tests {
 
         let v1 = graph.add_vertex();
         let v2 = graph.add_vertex();
+
+        let mut expected = HashMap::new();
+        expected.insert(v1.id(), v1);
+        expected.insert(v2.id(), v2);
+
+        let actual: HashMap<_, _> = graph.vertices().map(|v| (v.id(), v)).collect();
+
+        assert_eq!(actual, expected);
+    }
+
+    #[test]
+    fn add_vertices_with_label() {
+        let config = TestContext::generate();
+        let mut graph = GraphTraversalSource::new(&config.filepath);
+
+        let v1 = graph.add_vertex_with_label("v1");
+        let v2 = graph.add_vertex_with_label("v2");
 
         let mut expected = HashMap::new();
         expected.insert(v1.id(), v1);
