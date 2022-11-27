@@ -9,6 +9,7 @@ use std::path::Path;
 use vertex::VertexTraversal;
 
 const KEY_SYS_CONTEXT: &str = "sys_context";
+const VERTEX_PREFIX: &str = "vtx_";
 
 #[derive(Debug)]
 pub struct GraphTraversalSource {
@@ -55,10 +56,9 @@ impl GraphTraversalSource {
 
     /// Spawns a `VertexTraversal` over all vertices.
     pub fn vertices(&self) -> VertexTraversal {
-        let prefix = b"vtx_";
         let prefix_search = PrefixSearchIterator {
-            prefix_iterator: self.database.prefix_iterator(prefix),
-            prefix,
+            prefix_iterator: self.database.prefix_iterator(VERTEX_PREFIX),
+            prefix: VERTEX_PREFIX.as_bytes(),
         };
         VertexTraversal(prefix_search)
     }
@@ -71,7 +71,7 @@ impl GraphTraversalSource {
 }
 
 fn create_vertex_key(id: usize) -> String {
-    format!("vtx_{}", id)
+    format!("{}{}", VERTEX_PREFIX, id)
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
