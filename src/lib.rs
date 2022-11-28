@@ -1,7 +1,7 @@
 mod db;
 pub mod vertex;
 
-use crate::vertex::{AddVertexTraversal, Vertex, VertexWithIdTraversal};
+use crate::vertex::{SingleVertexTraversal, Vertex};
 use db::PrefixSearchIterator;
 use rocksdb::{DBWithThreadMode, SingleThreaded, DB};
 use serde::{Deserialize, Serialize};
@@ -38,19 +38,19 @@ impl GraphTraversalSource {
     }
 
     /// Spawns a traversal by adding a vertex with the default label.
-    pub fn add_vertex(&self) -> AddVertexTraversal {
+    pub fn add_vertex(&self) -> SingleVertexTraversal {
         self.add_vertex_with_label(vertex::DEFAULT_LABEL)
     }
 
     /// Spawns a traversal by adding a vertex with the specified label.
-    pub fn add_vertex_with_label<S: ToString>(&self, label: S) -> AddVertexTraversal {
+    pub fn add_vertex_with_label<S: ToString>(&self, label: S) -> SingleVertexTraversal {
         let id = self.new_id();
 
         let vertex = Vertex::new(id, label);
         let mut vertices = HashMap::new();
         vertices.insert(id, DirtyEntry::new(vertex));
 
-        AddVertexTraversal {
+        SingleVertexTraversal {
             id: Some(id),
             context: TraversalContext {
                 database: &self.database,
@@ -92,11 +92,10 @@ impl GraphTraversalSource {
     }
 
     /// Spawns a traversal starting with the vertex with the specified id.
-    pub fn vertex_with_id(&self, id: usize) -> VertexWithIdTraversal {
-        VertexWithIdTraversal {
-            database: &self.database,
+    pub fn vertex_with_id(&self, id: usize) -> SingleVertexTraversal {
+        SingleVertexTraversal {
             id: Some(id),
-            _context: TraversalContext {
+            context: TraversalContext {
                 database: &self.database,
                 vertices: HashMap::new(),
             },

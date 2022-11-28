@@ -1,5 +1,5 @@
 use crate::db::PrefixSearchIterator;
-use crate::{create_vertex_key, TraversalContext};
+use crate::{create_vertex_key, DirtyEntry, TraversalContext};
 use rocksdb::{DBWithThreadMode, SingleThreaded};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
@@ -54,35 +54,28 @@ impl<'a> Iterator for VertexTraversal<'a> {
     }
 }
 
-pub struct VertexWithIdTraversal<'a> {
-    pub(crate) database: &'a DBWithThreadMode<SingleThreaded>,
-    pub(crate) id: Option<usize>,
-    pub(crate) _context: TraversalContext<'a>,
-}
-
-impl<'a> Iterator for VertexWithIdTraversal<'a> {
-    type Item = Vertex;
-
-    fn next(&mut self) -> Option<Self::Item> {
-        let id = self.id.take()?;
-        let key = create_vertex_key(id);
-        self.database
-            .get(key)
-            .unwrap()
-            .map(|v| bincode::deserialize(&v).unwrap())
-    }
-}
-
-pub struct AddVertexTraversal<'a> {
+pub struct SingleVertexTraversal<'a> {
     pub(crate) id: Option<usize>,
     pub(crate) context: TraversalContext<'a>,
 }
 
-impl<'a> Iterator for AddVertexTraversal<'a> {
+impl<'a> Iterator for SingleVertexTraversal<'a> {
     type Item = Vertex;
 
     fn next(&mut self) -> Option<Self::Item> {
         let id = self.id.take()?;
-        self.context.vertices.get(&id).map(|v| v.entry.clone())
+        let vertex = match self.context.vertices.get(&id) {
+            Some(x) => x.entry.clone(),
+            None => {
+                let key = create_vertex_key(id);
+                let bytes = self.context.database.get(key).unwrap().unwrap();
+                let vertex: Vertex = bincode::deserialize(&bytes).unwrap();
+                let entry = DirtyEntry::new(vertex.clone());
+                self.context.vertices.insert(id, entry);
+                vertex
+            }
+        };
+
+        Some(vertex)
     }
 }
