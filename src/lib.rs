@@ -8,7 +8,6 @@ use serde::{Deserialize, Serialize};
 use std::cell::Cell;
 use std::collections::HashMap;
 use std::path::Path;
-use std::rc::Rc;
 use vertex::VertexTraversal;
 
 const KEY_SYS_CONTEXT: &str = "sys_context";
@@ -53,10 +52,10 @@ impl GraphTraversalSource {
 
         AddVertexTraversal {
             id: Some(id),
-            context: Rc::new(TraversalContext {
+            context: TraversalContext {
                 database: &self.database,
                 vertices,
-            }),
+            },
         }
     }
 
@@ -69,10 +68,10 @@ impl GraphTraversalSource {
         VertexTraversal {
             prefix_search,
             label: None,
-            _context: Rc::new(TraversalContext {
+            _context: TraversalContext {
                 database: &self.database,
                 vertices: HashMap::new(),
-            }),
+            },
         }
     }
 
@@ -85,10 +84,10 @@ impl GraphTraversalSource {
         VertexTraversal {
             prefix_search,
             label: Some(label),
-            _context: Rc::new(TraversalContext {
+            _context: TraversalContext {
                 database: &self.database,
                 vertices: HashMap::new(),
-            }),
+            },
         }
     }
 
@@ -97,10 +96,10 @@ impl GraphTraversalSource {
         VertexWithIdTraversal {
             database: &self.database,
             id: Some(id),
-            _context: Rc::new(TraversalContext {
+            _context: TraversalContext {
                 database: &self.database,
                 vertices: HashMap::new(),
-            }),
+            },
         }
     }
 
